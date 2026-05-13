@@ -1,0 +1,120 @@
+-- Bunny Hop (BHop) like Half-Life / CS movement
+-- LocalScript -> StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+local bhopEnabled = true
+local autoJump = true
+local speedGain = 2
+local maxSpeed = 80
+local airControl = 0.15
+
+local character
+local humanoid
+local rootPart
+
+local moveLeft = false
+local moveRight = false
+
+local function setupCharacter(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	rootPart = char:WaitForChild("HumanoidRootPart")
+	
+	humanoid.WalkSpeed = 16
+end
+
+if player.Character then
+	setupCharacter(player.Character)
+end
+
+player.CharacterAdded:Connect(setupCharacter)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	
+	if input.KeyCode == Enum.KeyCode.A then
+		moveLeft = true
+	elseif input.KeyCode == Enum.KeyCode.D then
+		moveRight = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.A then
+		moveLeft = false
+	elseif input.KeyCode == Enum.KeyCode.D then
+		moveRight = false
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if not bhopEnabled then return end
+	if not humanoid or not rootPart then return end
+	
+	local state = humanoid:GetState()
+	local velocity = rootPart.AssemblyLinearVelocity
+	
+	-- Auto Jump
+	if autoJump then
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+			if state == Enum.HumanoidStateType.Running
+			or state == Enum.HumanoidStateType.Landed then
+				
+				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end
+	end
+	
+	-- Speed gain while hopping
+	local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
+	local speed = horizontalVelocity.Magnitude
+	
+	if state == Enum.HumanoidStateType.Freefall then
+		
+		local direction = humanoid.MoveDirection
+		
+		if moveLeft then
+			direction = direction - workspace.CurrentCamera.CFrame.RightVector
+		end
+		
+		if moveRight then
+			direction = direction + workspace.CurrentCamera.CFrame.RightVector
+		end
+		
+		if direction.Magnitude > 0 then
+			direction = direction.Unit
+			
+			local newVelocity = velocity + Vector3.new(
+				direction.X * airControl,
+				0,
+				direction.Z * airControl
+			)
+			
+			rootPart.AssemblyLinearVelocity = Vector3.new(
+				math.clamp(newVelocity.X, -maxSpeed, maxSpeed),
+				velocity.Y,
+				math.clamp(newVelocity.Z, -maxSpeed, maxSpeed)
+			)
+		end
+	end
+	
+	-- Increase speed after landing jumps
+	if state == Enum.HumanoidStateType.Running then
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+			if speed < maxSpeed then
+				local look = rootPart.CFrame.LookVector
+				
+				rootPart.AssemblyLinearVelocity += Vector3.new(
+					look.X * speedGain,
+					0,
+					look.Z * speedGain
+				)
+			end
+		end
+	end
+end)
